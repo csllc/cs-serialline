@@ -1,0 +1,26 @@
+{
+  "name": "cs-serialline",
+  "version": "0.0.1",
+  "description": "Line-based serial interface protocol helper",
+  "main": "serialline.js",
+  "scripts": {
+    "test": "make test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/csllc/cs-serialline.git"
+  },
+  "author": "Bill Glase <bglase@controls.com> (http://wwww.controls.com/)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/csllc/cs-serialline/issues"
+  },
+  "homepage": "https://github.com/csllc/cs-serialline",
+  "devDependencies": {
+    "chai": "^3.5.0",
+    "mocha": "^3.1.0"
+  },
+  "dependencies": {
+    "serialport": "^4.0.1"
+  }
+}
