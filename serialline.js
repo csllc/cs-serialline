@@ -17,7 +17,7 @@ var util = require('util');
 var EventEmitter = require('events').EventEmitter;
 
 // Module which manages the serial port
-var serialPortFactory = require('serialport');
+var SerialPortFactory = require('serialport');
 
 // Promise library
 var Promise = require('bluebird');
@@ -54,13 +54,15 @@ function SerialLine ( config ) {
   }
 
   // Use the node-serialport line parser for incoming data
-  config.options.parser = serialPortFactory.parsers.readline('\n')
+  config.options.parser = SerialPortFactory.parsers.readline('\n');
+
+  config.options.autoOpen = false;
 
   // The serial port object that is managed by this instance.
   // The port is not opened, just instantiated
-  me.port = new serialPortFactory.SerialPort( config.name, config.options, false );
+  me.port = new SerialPortFactory( config.name, config.options );
 
-  me.list = serialPortFactory.list;
+  me.list = SerialPortFactory.list;
 
   me.defaultTimeout = config.timeout || 1000;
 
@@ -108,7 +110,7 @@ SerialLine.prototype.listPorts = function() {
 
   return new Promise(function(resolve, reject){
 
-    serialPortFactory.list( function(err, ports) {
+    SerialPortFactory.list( function(err, ports) {
       if( err ) {
         reject( err );
       }
