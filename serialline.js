@@ -53,6 +53,9 @@ function SerialLine ( config ) {
     };
   }
 
+  config = config || {};
+  config.options = config.options || {};
+
   // Use the node-serialport line parser for incoming data
   config.options.parser = SerialPortFactory.parsers.readline('\n');
 
@@ -70,6 +73,9 @@ function SerialLine ( config ) {
 
   // Queue for outgoing messages
   me.queue = [];
+
+  // Set of watchers for incoming data
+  me.watchers = [];
 
   // Register Event handler for serial port incoming data
   this.port.on('data', this.onData.bind(this));
@@ -178,6 +184,9 @@ SerialLine.prototype.sendNextCommand = function() {
     me.port.write( me.queue[0].command + '\r\n', function (err)  {
         if( err ) {
           me.queue[0].callback( err );
+          me.queue.shift();
+          setImmediate( me.sendNextCommand() );
+
         }
         else {
           // wait for a response
@@ -232,6 +241,22 @@ SerialLine.prototype.send = function( command, response, options ) {
   });
 };
 
+
+SerialLine.prototype.watch = function( regex, options, callback ) {
+
+  // adjust for options being omitted from the function call
+  if( 'function' === typeof( options )) {
+    callback = options;
+    options = {};
+  }
+
+  if( 'function' !== typeof( callback )) {
+    throw new Error( 'watch callback must be a function');
+  }
+
+  this.watchers.push( { regex: regex, callback: callback });
+};
+
 /**
  * @private
  * @param {Buffer} data
@@ -244,6 +269,20 @@ SerialLine.prototype.onData = function(data)
     console.log('rx', data );
   }
   
+  // process the watchers
+  me.watchers.forEach( function( watcher ) {
+
+    var matches = data.match( watcher.regex );
+    
+    //console.log( matches );
+    
+    if( matches ) {
+      matches.forEach( function( match ) {
+        watcher.callback( match, watcher.regex );
+      });
+    }
+  });
+
   if( me.queue.length > 0 ) {
     var cmd = me.queue[0];
 
@@ -252,12 +291,9 @@ SerialLine.prototype.onData = function(data)
       cmd.dataLines.push( data );
     }
 
-    //console.log('comparing ' + data + '\n   with ' + cmd.response );
-
     // Test to see if the received data matches the expected response
     if( data.search( cmd.response ) > -1) {
 
-      //console.log( '---> MATCH');
       // Cancel the no-response timeout because we have a response
       if( this.responseTimer !== null ) {
         clearTimeout(this.responseTimer);

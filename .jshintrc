@@ -1,0 +1,23 @@
+// javascript lint configuration
+// based on Felix's Nodejs Style Guide
+// https://github.com/felixge/node-style-guide
+
+{
+  "camelcase": true,
+  "curly": true,
+  "eqeqeq": true,
+  "freeze": true,
+  "indent": 2,
+  "newcap": true,
+  "quotmark": "single",
+  "maxdepth": 3,
+  "maxstatements": 15,
+  "maxlen": 132,
+  "eqnull": true,
+  "funcscope": true,
+  "node": true,
+  "mocha": true,
+  "globals": {
+    "sails": true
+    }
+}
