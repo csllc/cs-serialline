@@ -71,6 +71,8 @@ function SerialLine ( config ) {
 
   me.verbose = config.verbose || false;
 
+  me.sendEol = config.sendEol || '\r\n';
+
   // Queue for outgoing messages
   me.queue = [];
 
@@ -145,7 +147,7 @@ SerialLine.prototype.open = function() {
       }
       else {
         if( me.verbose ) {
-          console.log( 'port disconnected');
+          console.log( 'port open');
         }
 
         me.emit( 'connected');
@@ -181,7 +183,7 @@ SerialLine.prototype.sendNextCommand = function() {
 
     var timeout = me.queue[0].options.timeout || me.defaultTimeout;
 
-    me.port.write( me.queue[0].command + '\r\n', function (err)  {
+    me.port.write( me.queue[0].command + me.sendEol, function (err)  {
         if( err ) {
           me.queue[0].callback( err );
           me.queue.shift();
@@ -189,8 +191,16 @@ SerialLine.prototype.sendNextCommand = function() {
 
         }
         else {
-          // wait for a response
-          me.responseTimer = setTimeout( me.handleResponseTimeout, timeout);
+
+          if( me.queue[0].response ) {
+            // wait for a response
+            me.responseTimer = setTimeout( me.handleResponseTimeout, timeout);
+          }
+          else {
+            me.queue[0].callback( null, null );
+            me.queue.shift();
+            setImmediate( me.sendNextCommand() );
+          }
 
         }
 
@@ -266,7 +276,7 @@ SerialLine.prototype.onData = function(data)
   var me = this;
 
   if( me.verbose ) {
-    console.log('rx', data );
+    console.log('rx: ', data );
   }
   
   // process the watchers
@@ -331,7 +341,6 @@ SerialLine.prototype.handleResponseTimeout = function()
 {
   if( this.responseTimer && this.queue.length > 0) {
     // the command at the top of the queue timed out
-
     this.queue[0].callback( new Error('Timeout') );
     this.queue.shift();
     this.sendNextCommand();
