@@ -57,7 +57,7 @@ function SerialLine ( config ) {
   config.options = config.options || {};
 
   // Use the node-serialport line parser for incoming data
-  config.options.parser = SerialPortFactory.parsers.readline('\n');
+  config.options.parser = config.options.parser || SerialPortFactory.parsers.readline('\n');
 
   config.options.autoOpen = false;
 
@@ -79,29 +79,11 @@ function SerialLine ( config ) {
   // Set of watchers for incoming data
   me.watchers = [];
 
-  // Register Event handler for serial port incoming data
-  this.port.on('data', this.onData.bind(this));
-
   // Function to catch response timeouts
   this.handleResponseTimeout = this.handleResponseTimeout.bind(this);
 
-  
-  // Catch an event if the port gets disconnected
-  me.port.on( 'disconnected', function() {
+  this.setUpSerialPort();
 
-    // FYI - the port object drops all listeners when it disconnects
-    // but after the disconnected event, so they haven't been dropped at
-    // this point.
-    if( me.verbose ) {
-      console.log( 'port disconnected');
-    }
-
-    me.emit( 'disconnected');
-
-    // let the port finish disconnecting, then work on reconnecting
-    process.nextTick( function() { me.reconnect(); } );
-
-  });
 }
 
 // This object can emit events.  Note, the inherits
@@ -150,8 +132,6 @@ SerialLine.prototype.open = function() {
           console.log( 'port open');
         }
 
-        me.emit( 'connected');
-
         resolve();
       }
 
@@ -182,8 +162,13 @@ SerialLine.prototype.sendNextCommand = function() {
     }
 
     var timeout = me.queue[0].options.timeout || me.defaultTimeout;
+    var eol = me.queue[0].options.eol || me.sendEol;
 
-    me.port.write( me.queue[0].command + me.sendEol, function (err)  {
+    // Emit what is being sent (probably mostly for diagnostics)
+    me.emit( 'write', me.queue[0].command + eol );
+
+
+    me.port.write( me.queue[0].command + eol, function (err)  {
         if( err ) {
           me.queue[0].callback( err );
           me.queue.shift();
@@ -192,15 +177,15 @@ SerialLine.prototype.sendNextCommand = function() {
         }
         else {
 
-          if( me.queue[0].response ) {
+          //if( me.queue[0].response ) {
             // wait for a response
             me.responseTimer = setTimeout( me.handleResponseTimeout, timeout);
-          }
-          else {
-            me.queue[0].callback( null, null );
-            me.queue.shift();
-            setImmediate( me.sendNextCommand() );
-          }
+          //}
+          //else {
+          //  me.queue[0].callback( null, null );
+          //  me.queue.shift();
+          //  setImmediate( me.sendNextCommand.bind(me) );
+          //}
 
         }
 
@@ -223,6 +208,11 @@ SerialLine.prototype.sendNextCommand = function() {
  */
 SerialLine.prototype.send = function( command, response, options ) {
   var me = this;
+
+  if( 'object' === typeof( response )) {
+    options = response;
+    response = null;
+  }
 
   options = options || {};
 
@@ -247,6 +237,35 @@ SerialLine.prototype.send = function( command, response, options ) {
       // try to start the command
       me.sendNextCommand();
     }
+
+  });
+};
+
+/**
+ * Writes directly to the serial port with no queuing or response processing
+ * 
+ * @param  {[type]} command  [description]
+ * @param  {[type]} response [description]
+ * @param  {[type]} options  [description]
+ * @return {[type]}          [description]
+ */
+SerialLine.prototype.write = function( command ) {
+  var me = this;
+
+  return new Promise(function(resolve, reject){
+
+    // Emit what is being sent (probably mostly for diagnostics)
+    me.emit( 'write', command );
+
+    me.port.write( command, function (err)  {
+      if( err ) {
+        reject(err);
+
+      }
+      else {
+        resolve();
+      }
+    });
 
   });
 };
@@ -328,6 +347,7 @@ SerialLine.prototype.onData = function(data)
 
   }
   else {
+    // we are not processing a command, so just emit upstream
     me.emit( 'data', data );
   }
 
@@ -341,7 +361,13 @@ SerialLine.prototype.handleResponseTimeout = function()
 {
   if( this.responseTimer && this.queue.length > 0) {
     // the command at the top of the queue timed out
-    this.queue[0].callback( new Error('Timeout') );
+    // If we needed a response, raise the error
+    if( this.queue[0].response ) {
+      this.queue[0].callback( new Error('Timeout') );
+    }
+    else {
+      this.queue[0].callback();
+    }
     this.queue.shift();
     this.sendNextCommand();
   }
@@ -361,10 +387,36 @@ SerialLine.prototype.handleResponseTimeout = function()
  */
 SerialLine.prototype.setUpSerialPort = function()
 {
+  var me = this;
+
   this.port.on('open', this.emit.bind(this, 'open'));
   this.port.on('close', this.emit.bind(this, 'close'));
   this.port.on('error', this.emit.bind(this, 'error'));
-  this.port.on('data', this.emit.bind(this, 'data'));
+
+  // Register Event handler for serial port incoming data
+  this.port.on('data', this.onData.bind(this));
+
+
+//  this.port.on('data', this.emit.bind(this, 'data'));
+  this.port.on('event', this.emit.bind(this, 'event'));
+
+  // Catch an event if the port gets disconnected
+  me.port.on( 'disconnected', function() {
+
+    // FYI - the port object drops all listeners when it disconnects
+    // but after the disconnected event, so they haven't been dropped at
+    // this point.
+    if( me.verbose ) {
+      console.log( 'port disconnected');
+    }
+
+    me.emit( 'disconnected');
+
+    // let the port finish disconnecting, then work on reconnecting
+    process.nextTick( function() { me.reconnect(); } );
+
+  });
+
 };
 
 
